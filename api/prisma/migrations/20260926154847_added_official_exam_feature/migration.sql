@@ -1,0 +1,17 @@
+-- CreateEnum
+CREATE TYPE "ExamType" AS ENUM ('USER', 'OFFICIAL');
+
+-- CreateEnum
+CREATE TYPE "ExamStatus" AS ENUM ('DRAFTED', 'SCHEDULED', 'LIVE', 'CLOSED', 'RESULTED');
+
+-- AlterTable
+ALTER TABLE "Exam" ADD COLUMN     "endAt" TIMESTAMP(3),
+ADD COLUMN     "planId" TEXT,
+ADD COLUMN     "startAt" TIMESTAMP(3),
+ADD COLUMN     "status" "ExamStatus" NOT NULL DEFAULT 'DRAFTED',
+ADD COLUMN     "type" "ExamType" NOT NULL DEFAULT 'USER',
+ALTER COLUMN "userId" DROP NOT NULL,
+ALTER COLUMN "count" DROP NOT NULL;
+
+-- AddForeignKey
+ALTER TABLE "Exam" ADD CONSTRAINT "Exam_planId_fkey" FOREIGN KEY ("planId") REFERENCES "subscription_plans"("id") ON DELETE SET NULL ON UPDATE CASCADE;

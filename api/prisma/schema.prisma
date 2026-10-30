@@ -1,0 +1,515 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+  // output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  USER
+}
+
+model User {
+  id         String  @id @default(uuid())
+  phone      String  @unique
+  name       String?
+  university String?
+
+  role         Role    @default(USER)
+  refreshToken String?
+
+  createAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  exam               Exam[]
+  attempts           Attempt[]
+  savedQuestions     SavedQuestion[]
+  userQuestionStates UserQuestionState[]
+  plans              UserPlan[]
+  carts              Cart[]
+  pkgs               UserPkg[]
+
+  @@map("users")
+}
+
+enum CategoryType {
+  MAJOR
+  COURSE
+  TOPIC
+  SUB_TOPIC
+}
+
+model Category {
+  id    String @id @default(uuid())
+  title String
+
+  type CategoryType @default(MAJOR)
+
+  banks    Bank[]
+  exams    Exam[]
+  userPlan UserPlan[]
+
+  parents CategoryRelation[] @relation(name: "Parent")
+  childs  CategoryRelation[] @relation(name: "Child")
+
+  notes  Note[]
+  videos Video[]
+  carts  CartItem[]
+
+  @@map("categories")
+}
+
+model CategoryRelation {
+  id       String   @id @default(cuid())
+  parentId String
+  childId  String
+
+  parent Category @relation("Parent", fields: [parentId], references: [id])
+  child  Category @relation("Child", fields: [childId], references: [id])
+
+  @@unique([parentId, childId])
+}
+
+model Bank {
+  id          String   @id @default(cuid())
+  title       String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  count       Int      @default(0)
+  duration    Int      @default(60)
+  
+  public Boolean @default(false)
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  questions Question[]
+
+  @@map("banks")
+}
+
+enum QuestionDifficulty {
+  HARD
+  MEDIUM
+  EASY
+}
+
+model Question {
+  id         String             @id @default(uuid())
+  text       String
+  answer     String?
+  difficulty QuestionDifficulty @default(MEDIUM)
+
+  createdAt DateTime @default(now())
+
+  img String?
+
+  bankId String
+  bank   Bank   @relation(fields: [bankId], references: [id], onDelete: Cascade)
+
+  options            Option[]
+  exams              ExamQuestion[]
+  attemptAnswers     AttemptAnswer[]
+  savedQuestions     SavedQuestion[]
+  userQuestionStates UserQuestionState[]
+  days               DayItem[]
+
+  @@map("questions")
+}
+
+model Option {
+  id     String  @id @default(uuid())
+  text   String
+  isTrue Boolean
+
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  attemptAnswers AttemptAnswer[]
+
+  @@map("options")
+}
+
+enum AnswerState {
+  CORRECT
+  WRONG
+  UNANSWERED
+}
+
+model UserQuestionState {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(references: [id], fields: [userId], onDelete: Cascade)
+
+  questionId String
+  question   Question @relation(references: [id], fields: [questionId], onDelete: Cascade)
+
+  timesCorrect    Int @default(0)
+  timesWrong      Int @default(0)
+  timesUnAnswered Int @default(0)
+
+  lastOutcome AnswerState
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, questionId])
+}
+
+enum ExamType {
+  USER
+  OFFICIAL
+}
+
+enum ExamStatus {
+  DRAFTED
+  SCHEDULED
+  LIVE
+  CLOSED
+  RESULTED
+}
+
+model Exam {
+  id          String  @id @default(uuid())
+  userId      String?
+  user        User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  count       Int     @default(0)
+  title       String?
+  description String?
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  courseId String
+
+  startAt DateTime?
+  endAt   DateTime?
+
+  type   ExamType   @default(USER)
+  status ExamStatus @default(DRAFTED)
+
+  public Boolean @default(false)
+
+  duration Int
+
+  questions ExamQuestion[]
+  attempts  Attempt[]
+  results   Result[]
+
+  createdAt DateTime @default(now())
+}
+
+model ExamQuestion {
+  id String @id @default(uuid())
+
+  examId String
+  exam   Exam   @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  order Int
+
+  @@unique([examId, questionId])
+  @@unique([examId, order])
+}
+
+enum AttemptStatus {
+  PENDING
+  SUBMITTED
+}
+
+model Attempt {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  examId String
+  exam   Exam   @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  startAt  DateTime
+  expireAt DateTime
+
+  status AttemptStatus @default(PENDING)
+
+  attemptAnswers AttemptAnswer[]
+  result         Result?
+
+  @@index([examId, userId])
+  @@index([userId, status])
+  @@index([expireAt])
+  @@index([status])
+  @@map("attempts")
+}
+
+model AttemptAnswer {
+  id String @id @default(uuid())
+
+  attemptId String
+  attempt   Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  optionId String
+  option   Option @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+  @@unique([attemptId, optionId])
+  @@map("attempt_answers")
+}
+
+model Result {
+  id         String @id @default(uuid())
+  correct    Int
+  wrong      Int
+  totalCount Int
+
+  score           Decimal? @db.Decimal(10, 2)
+  points          Decimal  @db.Decimal(10, 2)
+  pointsWithMinus Decimal  @db.Decimal(10, 2)
+
+  ranking Int?
+
+  attemptId String  @unique
+  attempt   Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  examId String
+  exam   Exam   @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@map("results")
+}
+
+model SavedQuestion {
+  id String @id @default(uuid())
+
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, userId])
+  @@map("saved-questions")
+}
+
+enum PlanType {
+  ALL
+  SINGLE
+}
+
+model Plan {
+  id          String @id @default(uuid())
+  title       String
+  description String
+
+  type          PlanType
+  price         Decimal  @db.Decimal(10, 2)
+  discountPrice Decimal? @db.Decimal(10, 2)
+
+  durationDays Int
+
+  users UserPlan[]
+  carts CartItem[]
+}
+
+model UserPlan {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  planId String
+  plan   Plan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  startAt DateTime @default(now())
+  endAt   DateTime
+
+  courseId String?
+  course   Category? @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, planId, courseId])
+  @@map("userPlans")
+}
+
+model Note {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  key String?
+
+  public Boolean @default(false)
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  days DayItem[]
+
+  @@map("notes")
+}
+
+enum VideoStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  FAILED
+  DELETING
+}
+
+model Video {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  thumbnailUrl String?
+  arvanVideoId String? @unique
+  arvanFileId  String? @unique
+
+  status VideoStatus @default(UPLOADING)
+
+  public Boolean @default(false)
+
+  categoryId String
+  category   Category @relation(references: [id], fields: [categoryId], onDelete: Cascade)
+
+  days DayItem[]
+
+  @@map("videos")
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUND
+}
+
+model Cart {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amount Decimal @db.Decimal(10, 2)
+
+  items CartItem[]
+
+  authority String?
+
+  status PaymentStatus @default(PENDING)
+
+  @@unique([authority])
+}
+
+enum CartItemType {
+  PLAN
+  PKG
+}
+
+model CartItem {
+  id String @id @default(uuid())
+
+  cartId String
+  cart   Cart   @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  planId String?
+  plan   Plan?   @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  courseId String?
+  course   Category? @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  pkgId String?
+  pkg   Pkg?    @relation(fields: [pkgId], references: [id], onDelete: Cascade)
+
+  type CartItemType @default(PLAN)
+
+  @@unique([cartId, planId, courseId])
+  @@unique([cartId, pkgId])
+}
+
+model Pkg {
+  id          String  @id @default(uuid())
+  title       String
+  description String?
+
+  price         Decimal  @db.Decimal(10, 2)
+  discountPrice Decimal? @db.Decimal(10, 2)
+
+  publish Boolean @default(false)
+
+  days  Day[]
+  carts CartItem[]
+  users UserPkg[]
+}
+
+model Day {
+  id          String  @id @default(uuid())
+  title       String
+  description String?
+
+  items DayItem[]
+  order Int       @default(1)
+
+  pkgId String
+  pkg   Pkg    @relation(fields: [pkgId], references: [id], onDelete: Cascade)
+}
+
+enum ContentType {
+  VIDEO
+  NOTE
+  QUESTION
+}
+
+model DayItem {
+  id String @id @default(uuid())
+
+  dayId String
+  day   Day    @relation(references: [id], fields: [dayId], onDelete: Cascade)
+
+  noteId String?
+  note   Note?   @relation(references: [id], fields: [noteId], onDelete: Cascade)
+
+  videoId String?
+  video   Video?  @relation(references: [id], fields: [videoId], onDelete: Cascade)
+
+  questionId String?
+  question   Question? @relation(references: [id], fields: [questionId], onDelete: Cascade)
+
+  type ContentType
+
+  order Int @default(1)
+
+  @@unique([dayId, noteId])
+  @@unique([dayId, videoId])
+  @@unique([dayId, questionId])
+  @@unique([dayId, type, order])
+}
+
+model UserPkg {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(references: [id], fields: [userId], onDelete: Cascade)
+
+  pkgId String
+  pkg   Pkg    @relation(references: [id], fields: [pkgId], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, pkgId])
+}
